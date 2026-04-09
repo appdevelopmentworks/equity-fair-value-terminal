@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Equity Fair Value Terminal",
+  "version": "0.1.0",
+  "identifier": "com.openai.equityfairvalueterminal",
+  "build": {
+    "beforeDevCommand": {
+      "cwd": "../frontend",
+      "script": "cmd /c npm.cmd run dev",
+      "wait": false
+    },
+    "beforeBuildCommand": {
+      "cwd": "../frontend",
+      "script": "cmd /c npm.cmd run build"
+    },
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../frontend/out"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Equity Fair Value Terminal",
+        "width": 1480,
+        "height": 960,
+        "minWidth": 1180,
+        "minHeight": 760,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "targets": "nsis",
+    "windows": {
+      "digestAlgorithm": "sha256"
+    }
+  }
+}

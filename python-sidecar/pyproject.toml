@@ -1,0 +1,15 @@
+[project]
+name = "equity-fair-value-sidecar"
+version = "0.1.0"
+description = "Python sidecar for market data and valuation logic."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "yfinance>=0.2.61"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = false

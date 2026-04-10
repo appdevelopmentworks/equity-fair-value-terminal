@@ -1,115 +1,162 @@
 # Build and Distribution Specification
 
-## 1. 目的
-本書は `equity-fair-value-terminal` を Windows 向け実行体として build / distribute するための前提と現状を定義する。
+## 1. Purpose
+This document defines the current Windows build and distribution model for `equity-fair-value-terminal`.
 
-## 2. 配布対象
-- 現在対象: Windows
-- 将来拡張: macOS
-- Linux は current scope 外
+It should describe the repository as it currently works, including release assumptions and any remaining verification gaps.
 
-## 3. 構成要素
-- `frontend/` : Next.js 16
-- `src-tauri/` : Tauri 2 / Rust
-- `python-sidecar/` : Python worker
-- `docs/` : 要件・設計・運用ドキュメント
+## 2. Supported Distribution Target
+- Primary packaged target: Windows desktop
+- Secondary future target: macOS
+- Linux is outside the current scope
 
-## 4. 現在の build 方針
+## 3. Distribution Components
+- `frontend/`
+  - Next.js 16 static frontend
+- `src-tauri/`
+  - Tauri 2 desktop shell
+  - Rust bridge for Python sidecar process control
+- `python-sidecar/`
+  - Python market-data and valuation worker
+- `docs/`
+  - specifications, implementation notes, and release checklist
 
-### 4.1 frontend
-- Next.js は静的出力前提
-- Tauri 内で常時 Node サーバーを立てない
-- 生成物を Tauri の `frontendDist` に組み込む
+## 4. Current Build Model
+
+### 4.1 Frontend
+- The frontend is built as static output.
+- Tauri uses:
+  - `beforeBuildCommand`
+  - `frontendDist`
+- The current configured output path is `frontend/out`.
 
 ### 4.2 Python sidecar
-- 開発時は `.venv/Scripts/python.exe + src/main.py` を使う
-- 配布時は実行物化して bundled sidecar とする
-- Tauri 側から subprocess として呼び出す
+- Development runtime uses:
+  - `python-sidecar/.venv/Scripts/python.exe`
+  - `python-sidecar/src/main.py`
+- Packaged runtime uses a bundled executable sidecar.
+- The packaged sidecar filename is:
+  - `eqfv-python-sidecar.exe`
+- The packaged sidecar bundle path is:
+  - `src-tauri/sidecars/eqfv-python-sidecar.exe`
+- The Rust packaged runtime lookup path is:
+  - `sidecars/eqfv-python-sidecar.exe`
+- The current release preparation script is:
+  - `scripts/build-sidecar.ps1`
 
 ### 4.3 Tauri / Rust
-- frontend と native の橋渡し
-- sidecar 起動
-- error normalization
-- dev / packaged で sidecar 解決先を切り替える
+- Tauri builds the Windows desktop executable and NSIS installer.
+- Rust is responsible for:
+  - sidecar launch
+  - timeout handling
+  - JSON parsing
+  - response validation
+  - error normalization
+  - packaged sidecar lookup
 
-## 5. 現在の sidecar bridge コマンド
-- `fetch_quote`
-- `fetch_chart`
-- `search_symbols`
-- `fetch_valuations`
+## 5. Current Release Artifact Metadata
+The repository already includes the main metadata required for Windows packaging:
+- product name
+- app identifier
+- version
+- icon set
+- NSIS bundle target
 
-sidecar 側 subcommand:
-- `quote`
-- `chart`
-- `search`
-- `valuations-only`
+These are currently defined in:
+- `src-tauri/tauri.conf.json`
+- `src-tauri/Cargo.toml`
+- `package.json`
 
-## 6. 現在の配布状態
-コードベース上は Windows desktop app としての構成が整っている。
+## 6. Current Release Readiness Status
 
-ただし release engineering 観点では、以下は別途最終確認が必要:
-- packaged Python sidecar の最終 bundle
-- Windows installer の作成と実機確認
-- 別環境での first-run smoke test
+### 6.1 Already configured
+- Static frontend export is wired into Tauri build
+- App icon assets exist
+- Product name and identifier are set
+- Version metadata exists
+- NSIS is the configured bundle target
+- Rust packaged runtime path for a bundled sidecar is defined
+- Root release build runs sidecar preparation before `tauri build`
+- Release compilation fails early if the bundled sidecar is missing
 
-## 7. 想定 build 手順
-1. frontend 依存を install
-2. frontend build / export
-3. python-sidecar の依存を install
-4. python-sidecar を実行物化
-5. Tauri build
-6. Windows installer 生成
-7. 実機 smoke test
+### 6.2 Not yet completed
+- Verified packaged installer smoke test
+- Clean-machine installation verification
+- Final release-signing / publisher-specific metadata decisions if needed
 
-## 8. 開発環境
+## 7. Root Release Commands
+
+### 7.1 Sidecar preparation
+```powershell
+cmd.exe /c npm.cmd run sidecar:build
+```
+
+This command:
+1. runs PyInstaller against `python-sidecar/pyinstaller.spec`
+2. locates the built `eqfv-python-sidecar.exe`
+3. copies it into `src-tauri/sidecars/eqfv-python-sidecar.exe`
+
+### 7.2 Windows packaged build
+```powershell
+cmd.exe /c npm.cmd run build
+```
+
+This command:
+1. builds the static frontend export
+2. prepares the packaged Python sidecar
+3. runs `tauri build`
+
+## 8. Expected Release Build Sequence
+The intended Windows release sequence is:
+1. Install frontend dependencies
+2. Prepare the Python sidecar environment
+3. Install Python packaging dependencies
+4. Build the packaged Python sidecar executable
+5. Copy the sidecar into Tauri bundle resources
+6. Run `tauri build`
+7. Verify the generated NSIS installer
+8. Install and smoke test on Windows
+
+## 9. Release Verification Scope
+At minimum, release verification should include:
+- app launch from installed build
+- English UI sanity
+- Japanese UI sanity
+- US stock lookup
+- Japanese stock lookup
+- chart rendering
+- timeframe switching
+- valuation cards
+- unavailable valuation states
+- error handling states
+- dark mode
+- installer install and uninstall
+
+## 10. Clean-Machine Assumptions
+The packaged Windows app should not require the end user to install:
 - Node.js
-- Rust toolchain
-- Python
-- Tauri CLI
-- Windows build environment
+- Rust
+- a separate Python runtime
 
-## 9. 配布前チェック
-- 初回起動成功
-- sidecar 起動成功
-- ticker search 成功
-- company-name autocomplete 表示確認
-- 日本株・米国株の代表銘柄で表示確認
-- ローソク足描画確認
-- valuation unavailable パターン確認
-- dark mode 表示確認
-- installer からの正常起動確認
+The packaged app still requires:
+- internet access for live yfinance-based requests
 
-## 10. bilingual UI 追加時の build 影響
-bilingual UI support は主に frontend の責務とする。
+## 11. Packaging Assumptions
+- PyInstaller is installed into the sidecar virtual environment before release builds.
+- The packaged sidecar remains a separate bundled resource, not a Rust-embedded binary.
+- The frontend remains a static export consumed by Tauri from `frontend/out`.
+- Release lookup must never depend on development-only Python paths.
+- The Windows release machine must allow Cargo build scripts and procedural macro DLL loading during Rust compilation.
 
-影響範囲:
-- locale dictionary の同梱
-- formatter の locale 切替
-- packaged build での resource 同梱確認
+## 12. Checklist Reference
+Use the operational release checklist in:
+- `docs/13-release-readiness-checklist.md`
 
-非影響を維持したい範囲:
-- sidecar contract
-- Rust bridge command
-- error code の安定性
+That checklist is the release gate for deciding whether a Windows installer is ready to distribute.
 
-## 11. リスクと対策
-
-### 11.1 Python sidecar サイズ増大
-対策:
-- 必要最小限の依存に絞る
-- 追加 valuation method は feasibility を先に確認する
-
-### 11.2 市場データ欠損
-対策:
-- 取得できた情報だけ表示する
-- 手法ごとに unavailable を許容する
-
-### 11.3 yfinance 依存リスク
-対策:
-- access layer を Python 側に閉じ込める
-- locale 対応や UI 改修と分離する
-
-## 12. リリース戦略
-- まず current MVP を Windows 向けに安定化
-- その後 bilingual UI を追加
-- 追加 valuation cards は yfinance feasibility review 後に段階的導入
+## 13. Non-goals for this phase
+This phase does not require:
+- new product features
+- new valuation methods
+- architecture rewrites
+- platform expansion beyond Windows packaging readiness

@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use tauri::{AppHandle, Manager};
 use wait_timeout::ChildExt;
 
@@ -12,6 +15,8 @@ use crate::models::{
 
 const SIDECAR_TIMEOUT_SECONDS: u64 = 15;
 const VALID_CHART_RANGES: [&str; 6] = ["1M", "3M", "6M", "1Y", "5Y", "MAX"];
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 enum SidecarTarget {
     Development {
@@ -212,6 +217,9 @@ fn execute_sidecar(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
 
     let mut child = command.spawn().map_err(|_| {
         SidecarProcessError::new(
@@ -464,20 +472,21 @@ fn resolve_sidecar_target(app: &AppHandle) -> Result<SidecarTarget, SidecarProce
         )
     })?;
 
-    let packaged_sidecar = resource_dir
-        .join("sidecars")
-        .join("eqfv-python-sidecar.exe");
+    for packaged_sidecar in [
+        resource_dir.join("sidecars").join("eqfv-python-sidecar.exe"),
+        resource_dir.join("eqfv-python-sidecar.exe"),
+    ] {
+        if packaged_sidecar.exists() {
+            let workdir = packaged_sidecar
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| resource_dir.clone());
 
-    if packaged_sidecar.exists() {
-        let workdir = packaged_sidecar
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or(resource_dir);
-
-        return Ok(SidecarTarget::Packaged {
-            executable: packaged_sidecar,
-            workdir,
-        });
+            return Ok(SidecarTarget::Packaged {
+                executable: packaged_sidecar,
+                workdir,
+            });
+        }
     }
 
     Err(SidecarProcessError::new(

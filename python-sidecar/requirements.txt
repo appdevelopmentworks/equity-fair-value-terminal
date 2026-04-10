@@ -1,2 +1,2 @@
 yfinance>=0.2.61
-
+pyinstaller>=6.15,<7

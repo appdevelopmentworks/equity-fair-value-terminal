@@ -6,6 +6,8 @@ python-sidecar/.venv/
 python-sidecar/.pytest_cache/
 python-sidecar/__pycache__/
 python-sidecar/**/*.pyc
+python-sidecar/build/
+python-sidecar/dist/
 src-tauri/target/
 src-tauri/gen/
 target/

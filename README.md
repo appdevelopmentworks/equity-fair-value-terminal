@@ -4,7 +4,11 @@ Japanese README: [README.ja.md](C:/Users/hartm/Desktop/equity-fair-value-termina
 
 Desktop stock valuation application for Windows built with Tauri 2, Next.js 16, TypeScript, Tailwind CSS, and a Python sidecar.
 
-## Current RC MVP
+## Overview
+
+`equity-fair-value-terminal` is a desktop-first fair value application for Japanese and US equities. It combines a Tauri desktop shell, a static Next.js frontend, Rust-side process control, and a Python sidecar that fetches live market data and calculates valuation methods from `yfinance`.
+
+Current MVP capabilities:
 - ticker-first search with company-name autocomplete
 - English and Japanese UI support
 - live quote lookup for Japanese and US equities supported by `yfinance`
@@ -15,8 +19,35 @@ Desktop stock valuation application for Windows built with Tauri 2, Next.js 16, 
 - per-section and per-method `ok / unavailable / error` handling
 - dark mode and desktop-first layout
 
-## Local setup
-PowerShell commands from `C:\Users\hartm\Desktop\equity-fair-value-terminal`:
+## Stack
+
+- Desktop shell: Tauri 2
+- Frontend: Next.js 16, React 19, TypeScript
+- Styling: Tailwind CSS 4
+- Desktop bridge: Rust
+- Market data and valuation engine: Python 3.12 sidecar
+- Market data source: `yfinance`
+
+## Repository layout
+
+```text
+frontend/         Next.js app and desktop UI
+python-sidecar/   yfinance integration and valuation logic
+src-tauri/        Tauri app, Rust bridge, Windows bundle config
+scripts/          Build helper scripts for release packaging
+docs/             Product, implementation, and release specifications
+```
+
+## Documentation map
+
+- Product and implementation specs: [docs](C:/Users/hartm/Desktop/equity-fair-value-terminal/docs)
+- Windows release procedure: [RELEASE.md](C:/Users/hartm/Desktop/equity-fair-value-terminal/RELEASE.md)
+- Release verification checklist: [docs/13-release-readiness-checklist.md](C:/Users/hartm/Desktop/equity-fair-value-terminal/docs/13-release-readiness-checklist.md)
+- Release notes: [CHANGELOG.md](C:/Users/hartm/Desktop/equity-fair-value-terminal/CHANGELOG.md)
+
+## Local development setup
+
+Run the following in PowerShell from `C:\Users\hartm\Desktop\equity-fair-value-terminal`.
 
 1. Install JavaScript dependencies.
 ```powershell
@@ -32,24 +63,41 @@ $python = Get-ChildItem .\.uv-python -Recurse -Filter python.exe | Select-Object
 uv.exe sync --project python-sidecar --python $python
 ```
 
-3. Optional sidecar smoke tests.
+3. Install Python packaging dependencies used by the Windows sidecar build.
+```powershell
+$env:UV_CACHE_DIR = (Join-Path (Get-Location) '.uv-cache')
+uv.exe pip install --python python-sidecar\.venv\Scripts\python.exe -r python-sidecar\requirements.txt
+```
+
+4. Optional sidecar smoke tests.
 ```powershell
 python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py AAPL
 python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py 7203
-python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py 6758
 python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py chart 7203 1Y
-python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py valuations-only 7203
+python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py valuations-only BRK-B
 python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py search apple
-python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py search toyota
-python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py search トヨタ
 ```
 
-## Run in development
+## Run the frontend only
+
+Use this when you want the Next.js app without the Tauri shell.
+
+```powershell
+cmd.exe /c npm.cmd run dev --workspace frontend
+```
+
+The standalone frontend expects the Tauri bridge only when running inside the desktop app, so desktop-specific commands should still be exercised through `tauri:dev`.
+
+## Run the Tauri desktop app
+
+This is the normal local development path. Tauri starts the frontend dev server automatically through `beforeDevCommand`.
+
 ```powershell
 cmd.exe /c npm.cmd run tauri:dev
 ```
 
 If Windows application control blocks `target\debug\equity-fair-value-terminal.exe`, retry with a temp Cargo target directory:
+
 ```powershell
 $target = 'C:\Users\hartm\AppData\Local\Temp\eqfv-cargo-target'
 [void](New-Item -ItemType Directory -Force $target)
@@ -57,32 +105,93 @@ $env:CARGO_TARGET_DIR = $target
 cmd.exe /c npm.cmd run tauri:dev
 ```
 
-## Search notes
+The Tauri dev config now clears `CARGO_TARGET_DIR` before starting the frontend dev server. In this managed Windows environment, `next dev` can still fail earlier with `spawn EPERM`, so a less restricted machine may still be required for desktop development.
+
+## Python sidecar runtime assumptions
+
+- Development mode expects `python-sidecar/.venv/Scripts/python.exe` and `python-sidecar/src/main.py` to exist.
+- Release mode expects a bundled sidecar executable at `src-tauri/sidecars/eqfv-python-sidecar.exe` before `tauri build`.
+- The packaged app does not require end users to install Python separately.
+- Quote, chart, search, and valuation requests require internet access because data is fetched from `yfinance`.
+
+## Search behavior notes
+
 - ticker entry remains the primary flow
 - company-name suggestions appear when `yfinance` can resolve them
 - English company-name matching is currently more reliable than Japanese company-name matching
-- choosing a suggestion opens the same quote / chart / valuation flow as direct ticker entry
+- choosing a suggestion opens the same quote, chart, and valuation flow as direct ticker entry
 - pressing `Enter` while typing a ticker keeps the direct ticker flow
-- 4-digit TSE codes such as `7203` and `6758` are accepted and normalized to `7203.T` / `6758.T`
+- 4-digit TSE codes such as `7203` and `6758` are accepted and normalized to `7203.T` and `6758.T`
 
 ## Frontend production build
+
 ```powershell
 cmd.exe /c npm.cmd run build --workspace frontend
 ```
 
-## Verification completed in this environment
+This produces the static export consumed by Tauri at `frontend/out`.
+
+## Windows release build
+
+The packaged Windows build expects a bundled sidecar executable at `src-tauri/sidecars/eqfv-python-sidecar.exe`.
+
+`npm run build` performs the release flow in this order:
+1. frontend static build
+2. packaged Python sidecar build
+3. copy into `src-tauri/sidecars`
+4. `tauri build`
+
+Run it with:
+
+```powershell
+cmd.exe /c npm.cmd run build
+```
+
+Expected NSIS installer output:
+
+```text
+src-tauri/target/release/bundle/nsis/
+```
+
+If the sidecar file is missing during release compilation, [build.rs](C:/Users/hartm/Desktop/equity-fair-value-terminal/src-tauri/build.rs) fails early with a clear error.
+
+## Known limitations
+
+- The packaged app depends on live `yfinance` data and requires internet access.
+- Japanese company-name autocomplete is best-effort and currently less reliable than English company-name matching.
+- Some valuation methods can legitimately return `unavailable` when required financial fields are missing or unsuitable.
+- Provider-level field availability can differ between US and Japanese equities.
+- `cmd.exe /c npm.cmd run dev --workspace frontend` and `cmd.exe /c npm.cmd run tauri:dev` can fail with `spawn EPERM` in managed Windows environments where Node child-process creation is restricted.
+- Some managed Windows environments block Cargo build scripts or procedural macro DLL loading during Rust compilation. In that case, run the release build on a Windows machine that allows normal Rust and Tauri compilation.
+- Code signing and publisher-specific installer metadata remain manual release decisions.
+
+## Release verification in this environment
+
+The following were already verified in this workspace:
 - `cmd.exe /c .\node_modules\.bin\tsc.cmd -p frontend\tsconfig.json --noEmit`
 - `cmd.exe /c npm.cmd run build --workspace frontend`
+- `cmd.exe /c npm.cmd run sidecar:build`
+- `cmd.exe /c npm.cmd run build` reaches the Rust compilation stage after frontend export and sidecar packaging
 - `python-sidecar\.venv\Scripts\python.exe -m compileall python-sidecar\src`
 - `python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py AAPL`
 - `python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py 7203`
 - `python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py 6758`
 - `python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py chart 7203 1Y`
-- `python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py valuations-only 7203`
-- `cargo check`
+- `python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py valuations-only BRK-B`
+- `python-sidecar\.venv\Scripts\python.exe python-sidecar\src\main.py search apple`
 
-## Recommended final checks before shipping
-- verify the packaged sidecar bundle and Windows installer path
+The following still fail in this managed Windows environment because application control blocks Cargo build scripts or procedural macro DLL loading:
+- `cargo check`
+- the final Rust compilation step of `npm run build`
+
+The following also fail in this managed Windows environment because `next dev` cannot spawn its worker process:
+- `cmd.exe /c npm.cmd run dev --workspace frontend`
+- `cmd.exe /c npm.cmd run tauri:dev`
+
+## Before shipping
+
+- follow [RELEASE.md](C:/Users/hartm/Desktop/equity-fair-value-terminal/RELEASE.md)
+- complete [docs/13-release-readiness-checklist.md](C:/Users/hartm/Desktop/equity-fair-value-terminal/docs/13-release-readiness-checklist.md)
+- confirm the packaged sidecar is present in the installed app
 - smoke test both English and Japanese modes in the packaged build
-- confirm dark mode and light mode at common desktop window sizes
-- do one final offline / temporary-provider-failure pass for search, chart, and valuation sections
+- verify offline and temporary-provider-failure behavior for search, chart, and valuation sections

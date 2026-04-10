@@ -6,12 +6,12 @@
   "build": {
     "beforeDevCommand": {
       "cwd": "../frontend",
-      "script": "cmd /c npm.cmd run dev",
+      "script": "cmd /c set \"CARGO_TARGET_DIR=\" && npm.cmd run dev",
       "wait": false
     },
     "beforeBuildCommand": {
-      "cwd": "../frontend",
-      "script": "cmd /c npm.cmd run build"
+      "cwd": "..",
+      "script": "powershell -ExecutionPolicy Bypass -File .\\scripts\\assert-frontend-dist.ps1"
     },
     "devUrl": "http://localhost:3000",
     "frontendDist": "../frontend/out"
@@ -32,6 +32,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": [
+      "sidecars/eqfv-python-sidecar.exe"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
